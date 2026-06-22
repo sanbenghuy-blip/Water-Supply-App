@@ -1,0 +1,933 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ទឹកស្អាត ជុក ឯម - System Engine</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        @font-face {
+            font-family: 'Khmer OS Battambang';
+            src: local('Khmer OS Battambang'), local('KhmerOSBattambang');
+        }
+        body {
+            font-family: 'Khmer OS Battambang', system-ui, -apple-system, sans-serif;
+        }
+        @media print {
+            body *, #view-dashboard, #view-customers, #view-invoices-list, .fixed, header, flex {
+                display: none !important;
+            }
+            #thermal-receipt-printout, #thermal-receipt-printout * {
+                display: block !important;
+            }
+            #thermal-receipt-printout {
+                position: absolute; left: 0; top: 0; width: 58mm; padding: 2mm;
+                font-family: 'Courier New', Courier, monospace, 'Khmer OS Battambang'; font-size: 11px; line-height: 1.3; color: #000; background: #fff;
+            }
+            .receipt-dash { border-bottom: 1px dashed #000; margin: 4px 0; }
+            .receipt-flex { display: flex !important; justify-content: space-between; }
+            .text-center { text-align: center !important; }
+        }
+        #thermal-receipt-printout { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 pb-20 md:pb-0">
+
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar Navigation -->
+        <div class="w-64 bg-slate-900 text-white flex flex-col justify-between hidden md:flex shrink-0">
+            <div class="p-5">
+                <div class="flex flex-col gap-1 mb-8">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="droplet" class="text-blue-400 w-8 h-8 shrink-0"></i>
+                        <span class="text-xl font-bold tracking-wider text-blue-400">ទឹកស្អាត ជុក ឯម</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 mt-2 block leading-relaxed">ភូមិ ហង្សឈូក ស្រុកសាមគ្គីមានជ័យ ខេត្តកំពង់ឆ្នាំង</span>
+                </div>
+                <nav class="space-y-2">
+                    <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="layout-dashboard" class="w-5 h-5"></i> <span>ផ្ទាំងគ្រប់គ្រង</span>
+                    </button>
+                    <button onclick="switchView('customers')" id="nav-customers" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="users" class="w-5 h-5"></i> <span>ព័ត៌មានអតិថិជន</span>
+                    </button>
+                    <button onclick="switchView('invoices-list')" id="nav-invoices-list" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="receipt" class="w-5 h-5"></i> <span>គ្រប់គ្រងវិក្កយបត្រ</span>
+                    </button>
+                </nav>
+            </div>
+            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-500 text-center space-y-1">
+                <div>សមគ្គីមានជ័យ, កំពង់ឆ្នាំង</div>
+                <div>v3.0.0 &copy; 2026</div>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col overflow-y-auto">
+            <!-- App Header -->
+            <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 shadow-xs">
+                <div class="flex flex-col">
+                    <h1 id="page-title" class="text-sm md:text-lg font-bold text-slate-800">ផ្ទាំងគ្រប់គ្រងប្រតិបត្តិការ</h1>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <!-- Language selector wrapper removed strictly from here -->
+                    <div id="header-actions" class="flex gap-2"></div>
+                </div>
+            </header>
+
+            <main class="p-4 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
+                
+                <!-- View: Dashboard -->
+                <div id="view-dashboard" class="space-y-6">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ចំណូលសរុប (ខែ)</p><h3 id="dash-revenue" class="text-lg md:text-2xl font-bold text-slate-900">$0.00</h3></div>
+                            <div class="p-2 md:p-3 bg-emerald-50 text-emerald-600 rounded-lg hidden sm:block"><i data-lucide="dollar-sign"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ការប្រើប្រាស់ទឹក</p><h3 id="dash-consumption" class="text-lg md:text-2xl font-bold text-slate-900">0 m³</h3></div>
+                            <div class="p-2 md:p-3 bg-blue-50 text-blue-600 rounded-lg hidden sm:block"><i data-lucide="droplet"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">មិនទាន់ទូទាត់</p><h3 id="dash-unpaid" class="text-lg md:text-2xl font-bold text-amber-600">0</h3></div>
+                            <div class="p-2 md:p-3 bg-amber-50 text-amber-600 rounded-lg hidden sm:block"><i data-lucide="file-text"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ហួសកាលកំណត់</p><h3 id="dash-overdue" class="text-lg md:text-2xl font-bold text-rose-600">0</h3></div>
+                            <div class="p-2 md:p-3 bg-rose-50 text-rose-600 rounded-lg hidden sm:block"><i data-lucide="alert-triangle"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                        <div class="relative flex-1">
+                            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input id="dash-search" type="text" placeholder="ស្វែងរក លេខវិក្កយបត្រ ឬ ឈ្មោះអតិថិជន..." oninput="renderDashboard()" class="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none placeholder:text-xs placeholder:md:text-sm">
+                        </div>
+                        <div class="flex items-center justify-between sm:justify-end gap-2">
+                            <label class="text-xs font-medium text-slate-400">ជ្រើសរើសខែបង់ប្រាក់:</label>
+                            <input id="dash-filter-month" type="month" value="2026-06" onchange="renderDashboard()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">ព័ត៌មានវិក្កយបត្រ</th>
+                                        <th class="px-6 py-4">គណនីអតិថិជន</th>
+                                        <th class="px-6 py-4">លេខនាឡិកា (ចាស់ ➔ ថ្មី)</th>
+                                        <th class="px-6 py-4">ប្រើប្រាស់សរុប</th>
+                                        <th class="px-6 py-4">ទឹកប្រាក់ត្រូវបង់</th>
+                                        <th class="px-6 py-4">ថ្ងៃផុតកំណត់</th>
+                                        <th class="px-6 py-4">ស្ថានភាព</th>
+                                        <th class="px-6 py-4 text-right">សកម្មភាព</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dash-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="dash-cards-container" class="block md:hidden p-4 space-y-4 bg-slate-50/50"></div>
+                    </div>
+                </div>
+
+                <!-- View: Customers -->
+                <div id="view-customers" class="space-y-6 hidden">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3 sm:flex-row justify-between sm:items-center">
+                        <input id="cust-search" type="text" placeholder="ស្វែងរកក្នុងបញ្ជីឈ្មោះអតិថិជន..." oninput="renderCustomers()" class="max-w-md w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none">
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                            <button onclick="exportXLSX('customers')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i> <span>ទាញយកជា Excel</span></button>
+                            <button onclick="triggerImportGate('customers')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer shrink-0"><i data-lucide="upload" class="w-3.5 h-3.5"></i> <span>បញ្ចូលឯកសារ Excel</span></button>
+                            <input type="file" id="import-cust-file" accept=".xlsx, .xls" onchange="importXLSX(event, 'customers')" class="hidden">
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">អត្តសញ្ញាណ (ID)</th>
+                                        <th class="px-6 py-4">ឈ្មោះពេញ</th>
+                                        <th class="px-6 py-4">លេខទូរស័ព្ទ</th>
+                                        <th class="px-6 py-4">អាសយដ្ឋានសេវាកម្ម</th>
+                                        <th class="px-6 py-4">ទិន្នន័យនាឡិកាចុងក្រោយ</th>
+                                        <th class="px-6 py-4 text-right">សកម្មភាព</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cust-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="cust-cards-container" class="block md:hidden p-4 space-y-4 bg-slate-50/50"></div>
+                    </div>
+                </div>
+
+                <!-- View: Invoices Matrix -->
+                <div id="view-invoices-list" class="space-y-6 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-xs h-fit space-y-4">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i> <span>កំណត់តម្លៃសេវាកម្ម</span></h3>
+                                <button type="button" id="matrix-lock-btn" onclick="requestAdminAuthorization(unlockMatrixFields)" class="text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition-all cursor-pointer">ចុចដើម្បីកែប្រែ</button>
+                            </div>
+                            <hr class="border-slate-100">
+                            <fieldset id="matrix-fieldset" disabled class="space-y-3 opacity-60">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">កម្រៃសេវាថេរប្រចាំខែ ($)</label>
+                                    <input id="config-base-rate" type="number" step="0.01" value="5.00" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">តម្លៃទឹកក្នុងមួយម៉ែត្រគូប ($ / m³)</label>
+                                    <input id="config-unit-rate" type="number" step="0.01" value="0.85" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">រយៈពេលត្រូវបង់ប្រាក់ (ថ្ងៃ)</label>
+                                    <input id="config-due-days" type="number" value="15" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div class="flex gap-2 pt-2">
+                                    <button type="button" onclick="lockMatrixFields(false)" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium py-2 rounded-lg cursor-pointer">បោះបង់</button>
+                                    <button type="button" onclick="updateSystemRules()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 rounded-lg cursor-pointer">រក្សាទុក</button>
+                                </div>
+                            </fieldset>
+                        </div>
+                        
+                        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                            <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-slate-900">សៀវភៅបញ្ជីវិក្កយបត្រសរុប</h3>
+                                <div class="flex gap-2">
+                                    <button onclick="exportXLSX('invoices')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"><i data-lucide="download" class="w-3 h-3"></i> <span>ទាញយក</span></button>
+                                    <button onclick="triggerImportGate('invoices')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"><i data-lucide="upload" class="w-3 h-3"></i> <span>បញ្ចូលឯកសារ</span></button>
+                                    <input type="file" id="import-inv-file" accept=".xlsx, .xls" onchange="importXLSX(event, 'invoices')" class="hidden">
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                            <th class="px-6 py-3">លេខវិក្កយបត្រ</th>
+                                            <th class="px-6 py-3">អត្តសញ្ញាណអតិថិជន</th>
+                                            <th class="px-6 py-3">ឈ្មោះពេញ</th>
+                                            <th class="px-6 py-3">វដ្តគណនីខែ</th>
+                                            <th class="px-6 py-3">ទឹកប្រាក់សរុប</th>
+                                            <th class="px-6 py-3">ស្ថានភាព</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="master-inv-table-body" class="divide-y divide-slate-100 text-xs font-mono"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Mobile Navigation Drawer -->
+    <div class="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 flex items-center justify-around py-2 z-40 md:hidden">
+        <button onclick="switchView('dashboard')" id="mob-nav-dashboard" class="flex flex-col items-center gap-0.5 text-blue-400 font-medium transition-all">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i><span class="text-[9px]">ផ្ទាំងគ្រប់គ្រង</span>
+        </button>
+        <button onclick="switchView('customers')" id="mob-nav-customers" class="flex flex-col items-center gap-0.5 text-slate-500 font-medium transition-all">
+            <i data-lucide="users" class="w-5 h-5"></i><span class="text-[9px]">អតិថិជន</span>
+        </button>
+        <button onclick="switchView('invoices-list')" id="mob-nav-invoices-list" class="flex flex-col items-center gap-0.5 text-slate-500 font-medium transition-all">
+            <i data-lucide="receipt" class="w-5 h-5"></i><span class="text-[9px]">វិក្កយបត្រ</span>
+        </button>
+    </div>
+
+    <div id="thermal-receipt-printout"></div>
+
+    <!-- Modal: Authorization Framework -->
+    <div id="modal-auth" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div class="mx-auto w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center"><i data-lucide="lock" class="w-6 h-6"></i></div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">តម្រូវឱ្យមានការអនុញ្ញាតពីអ្នកគ្រប់គ្រង</h3>
+                <p class="text-xs text-slate-400 mt-1">សូមបញ្ចូលលេខកូដសម្ងាត់អ្នកគ្រប់គ្រងដើម្បីបន្តប្រតិបត្តិការ。</p>
+            </div>
+            <input type="password" id="auth-password-input" placeholder="••••••" class="w-full text-center tracking-widest text-lg font-bold px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500">
+            <div class="flex gap-2">
+                <button onclick="closeAuthModal()" class="w-1/2 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 cursor-pointer">បោះបង់</button>
+                <button onclick="verifyAdminAuthorization()" class="w-1/2 py-2 bg-slate-900 hover:bg-slate-950 text-white rounded-lg text-sm font-medium cursor-pointer">ផ្ទៀងផ្ទាត់កូដ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Creation Node -->
+    <div id="modal-invoice" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <h3 class="text-base font-bold text-slate-900 mb-4">បង្កើតវិក្កយបត្រប្រចាំខែ</h3>
+            <form id="invoice-form" onsubmit="submitNewInvoice(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">ជ្រើសរើសគណនី / អតិថិជន</label>
+                    <select id="inv-cust-select" onchange="handleCustomerSelectChange()" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none"></select>
+                </div>
+                <div class="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                    <div><span class="block text-slate-400 font-semibold">ទិន្នន័យនាឡិកាចាស់</span><span id="inv-prev-meter-text" class="text-sm font-mono font-bold text-slate-700">0 m³</span></div>
+                    <div><span class="block text-slate-400 font-semibold">ទឹកប្រាក់ជំពាក់ចាស់</span><span id="inv-prev-debt-text" class="text-sm font-mono font-bold text-rose-600">$0.00</span></div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">បញ្ចូលលេខនាឡិកាថ្មី (m³)</label>
+                    <input type="number" id="inv-curr-meter" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">សម្រាប់វដ្តគណនីខែ</label>
+                    <input type="month" id="inv-date-month" required value="2026-06" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeInvoiceModal()" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 cursor-pointer">បោះបង់</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium cursor-pointer">ចេញវិក្កយបត្រ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Administrative Adjustments Ledger -->
+    <div id="modal-edit-invoice" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 id="edit-inv-title" class="text-base font-bold text-slate-900">កែប្រែទិន្នន័យវិក្កយបត្រ</h3>
+                    <p id="edit-inv-subtitle" class="text-xs text-slate-400 font-mono"></p>
+                </div>
+                <button type="button" onclick="closeEditInvoiceModal()" class="text-slate-400 hover:text-slate-600 cursor-pointer"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <form id="edit-invoice-form" onsubmit="submitInvoiceModification(event)" class="space-y-4">
+                <input type="hidden" id="edit-inv-target-no">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">លេខនាឡិកាចាប់ផ្តើម (m³)</label>
+                        <input type="number" id="edit-inv-start" required oninput="recalculateEditInvoiceForm()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">លេខនាឡិកាចុងក្រោយ (m³)</label>
+                        <input type="number" id="edit-inv-end" required oninput="recalculateEditInvoiceForm()" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">បរិមាណប្រើប្រាស់ (m³)</label>
+                        <input type="number" id="edit-inv-consumption" readonly class="w-full px-3 py-2 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-sm font-mono outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">ទឹកប្រាក់ត្រូវបង់សរុប ($)</label>
+                        <input type="number" step="0.01" id="edit-inv-total" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none font-bold text-slate-900">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">ទឹកប្រាក់បានទូទាត់ ($)</label>
+                        <input type="number" step="0.01" id="edit-inv-paid" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none text-emerald-600 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">ស្ថានភាពវិក្កយបត្រ</label>
+                        <select id="edit-inv-status" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none">
+                            <option value="Paid">បង់ប្រាក់រួច (Paid)</option>
+                            <option value="Unpaid">មិនទាន់បង់ប្រាក់ (Unpaid)</option>
+                            <option value="Overdue">ហួសកាលកំណត់ (Overdue)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">ថ្ងៃផុតកំណត់</label>
+                        <input type="date" id="edit-inv-duedate" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">កាលបរិច្ឆេទទទួលប្រាក់</label>
+                        <input type="text" id="edit-inv-paydate" readonly class="w-full px-3 py-2 bg-slate-50 border border-slate-200 text-slate-500 rounded-lg text-sm font-mono outline-none">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeEditInvoiceModal()" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 cursor-pointer">បិទជិត</button>
+                    <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium cursor-pointer">អនុវត្តការកែប្រែ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Onboarding profiles Node -->
+    <div id="modal-customer" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <h3 id="cust-modal-title" class="text-base font-bold text-slate-900 mb-4">ចុះឈ្មោះប្រវត្តិអតិថិជនថ្មី</h3>
+            <form id="customer-form" onsubmit="submitCustomerForm(event)" class="space-y-4">
+                <input type="hidden" id="edit-cust-id">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">ឈ្មោះពេញ</label>
+                    <input type="text" id="form-cust-name" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">លេខទូរស័ព្ទ</label>
+                    <input type="text" id="form-cust-phone" required class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">អាសយដ្ឋានប្រើប្រាស់សេវាកម្ម</label>
+                    <textarea id="form-cust-address" required rows="2" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none"></textarea>
+                </div>
+                <div id="initial-meter-container">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">ទិន្នន័យនាឡិកាចាប់ផ្តើមដំបូង (m³)</label>
+                    <input type="number" id="form-cust-initial-meter" value="0" min="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeCustomerModal()" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 cursor-pointer">បោះបង់</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium cursor-pointer">រក្សាទុកទិន្នន័យ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Remittance Ledger Management -->
+    <div id="modal-payment" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl border border-slate-100">
+            <h3 class="text-base font-bold text-slate-900 mb-1">ទទួលប្រាក់ទូទាត់ការប្រើប្រាស់</h3>
+            <p id="pay-modal-subtitle" class="text-xs text-slate-400 mb-4 font-mono"></p>
+            <form id="payment-form" onsubmit="submitPaymentReceived(event)" class="space-y-4">
+                <input type="hidden" id="pay-invoice-id">
+                <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1 text-xs">
+                    <div class="flex justify-between"><span>ថ្លៃទឹកក្នុងខែនេះ:</span> <span id="pay-text-due" class="font-bold">0.00</span></div>
+                    <div class="flex justify-between text-rose-600"><span>ប្រាក់ជំពាក់ចាស់:</span> <span id="pay-text-debt" class="font-bold">0.00</span></div>
+                    <hr class="border-slate-200 my-1">
+                    <div class="flex justify-between text-slate-900 font-bold text-sm"><span>ទឹកប្រាក់ត្រូវរួមសរុប:</span> <span id="pay-text-total">0.00</span></div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">ចំនួនទឹកប្រាក់ទទួលបាន ($)</label>
+                    <input type="number" id="pay-input-amount" step="0.01" required min="0.01" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono text-lg font-bold text-emerald-600 outline-none">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" onclick="closePaymentModal()" class="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50 cursor-pointer">បោះបង់</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium cursor-pointer">បញ្ជាក់ និងបោះពុម្ភបង្កាន់ដៃ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Post Process Tracking Node -->
+    <div id="modal-created-overview" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div class="mx-auto w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><i data-lucide="check-circle" class="w-6 h-6"></i></div>
+            <div class="text-center">
+                <h3 class="text-base font-bold text-slate-900">វិក្កយបត្រត្រូវបានបង្កើត</h3>
+                <p id="overview-inv-no" class="text-xs font-mono font-bold text-blue-600 mt-1"></p>
+            </div>
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs font-medium">
+                <div class="flex justify-between"><span>អត្តសញ្ញាណអតិថិជន:</span> <span id="overview-cust-id" class="text-slate-900 font-mono font-bold"></span></div>
+                <div class="flex justify-between"><span>ឈ្មោះអតិថិជន:</span> <span id="overview-cust-name" class="text-slate-900 font-bold"></span></div>
+                <div class="flex justify-between"><span>បរិមាណទឹកប្រើប្រាស់:</span> <span id="overview-consumption" class="text-slate-900 font-bold"></span></div>
+                <div class="flex justify-between border-t border-slate-200 pt-2 text-xs text-slate-900 font-bold"><span>ប្រាក់ត្រូវបង់សរុប:</span> <span id="overview-total"></span></div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeOverviewModal()" class="w-1/2 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 cursor-pointer">គ្រាន់តែបង្កើត</button>
+                <button id="overview-print-btn" class="w-1/2 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1 cursor-pointer">បោះពុម្ភវិក្កយបត្រ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_PASS_DEFAULT = "123456";
+        let activeCallback = null;
+        let pendingImportType = null;
+
+        let config = { baseRate: 5.00, unitRate: 0.85, dueDays: 15 };
+        let activeView = 'dashboard';
+
+        let customers = [
+            { id: "C001", name: "អ៊ុំ សុខា (Oum Sokha)", phone: "012-555192", address: "ភូមិ ហង្សឈូក", initialMeter: 120 },
+            { id: "C002", name: "លី ម៉េងហួរ", phone: "093-555431", address: "ជិតផ្សារសាមគ្គីមានជ័យ", initialMeter: 450 },
+            { id: "C003", name: "Chan Thida", phone: "077-555887", address: "Sankat Samki Meanchey", initialMeter: 89 }
+        ];
+
+        let invoices = [
+            { invoiceNo: "C001_0001", id: "C001", month: "2026-05", startM: 120, endM: 145, consumption: 25, waterCost: 26.25, debtApplied: 0, totalBilled: 26.25, amountPaid: 26.25, status: "Paid", date: "2026-05-15", dueDate: "2026-05-30", paymentDate: "2026-05-15" },
+            { invoiceNo: "C002_0001", id: "C002", month: "2026-05", startM: 450, endM: 492, consumption: 42, waterCost: 40.70, debtApplied: 0, totalBilled: 40.70, amountPaid: 0, status: "Unpaid", date: "2026-05-16", dueDate: "2026-05-31", paymentDate: null },
+            { invoiceNo: "C003_0001", id: "C003", month: "2026-05", startM: 89, endM: 89, consumption: 0, waterCost: 0, debtApplied: 0, totalBilled: 0, amountPaid: 0, status: "Paid", date: "2026-05-16", dueDate: "2026-05-31", paymentDate: "2026-05-16" }
+        ];
+
+        function getKhmerStatus(status) {
+            if (status === 'Paid') return 'បង់ប្រាក់រួច';
+            if (status === 'Unpaid') return 'មិនទាន់បង់';
+            return 'ហួសកាលកំណត់';
+        }
+
+        // --- Gatekeeper Authorization Systems ---
+        function requestAdminAuthorization(successCallback) {
+            activeCallback = successCallback;
+            document.getElementById('auth-password-input').value = '';
+            document.getElementById('modal-auth').classList.remove('hidden');
+            document.getElementById('auth-password-input').focus();
+        }
+        function closeAuthModal() { document.getElementById('modal-auth').classList.add('hidden'); activeCallback = null; }
+        function verifyAdminAuthorization() {
+            if(document.getElementById('auth-password-input').value === ADMIN_PASS_DEFAULT) {
+                const proceedWithAction = activeCallback;
+                closeAuthModal();
+                if(proceedWithAction) proceedWithAction();
+            } else {
+                alert("ការចូលដំណើរការត្រូវបានបដិសេធ: លេខកូដសម្ងាត់មិនត្រឹមត្រូវទេ។");
+            }
+        }
+
+        function triggerImportGate(dataType) {
+            pendingImportType = dataType;
+            requestAdminAuthorization(() => {
+                if (pendingImportType === 'customers') document.getElementById('import-cust-file').click();
+                else if (pendingImportType === 'invoices') document.getElementById('import-inv-file').click();
+            });
+        }
+
+        // --- View Switching Engine ---
+        function switchView(viewName) {
+            activeView = viewName;
+            
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-customers').classList.add('hidden');
+            document.getElementById('view-invoices-list').classList.add('hidden');
+            document.getElementById(`view-${viewName}`).classList.remove('hidden');
+
+            const navIds = ['dashboard', 'customers', 'invoices-list'];
+            navIds.forEach(id => {
+                const dBtn = document.getElementById(`nav-${id}`);
+                const mBtn = document.getElementById(`mob-nav-${id}`);
+                if (id === viewName) {
+                    if(dBtn) dBtn.className = "w-full flex items-center gap-3 px-4 py-3 bg-blue-600 rounded-lg text-white font-medium cursor-pointer transition-colors";
+                    if(mBtn) mBtn.className = "flex flex-col items-center gap-0.5 text-blue-400 font-medium transition-all";
+                } else {
+                    if(dBtn) dBtn.className = "w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-lg cursor-pointer transition-colors";
+                    if(mBtn) mBtn.className = "flex flex-col items-center gap-0.5 text-slate-500 hover:text-slate-400 font-medium transition-all";
+                }
+            });
+
+            const headerActions = document.getElementById('header-actions');
+            const pageTitle = document.getElementById('page-title');
+            headerActions.innerHTML = '';
+
+            if (viewName === 'dashboard') {
+                pageTitle.innerText = "ផ្ទាំងគ្រប់គ្រងប្រតិបត្តិការ";
+                headerActions.innerHTML = `<button onclick="openInvoiceModal()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg font-medium text-xs cursor-pointer transition-all"><i data-lucide="file-plus" class="w-3.5 h-3.5"></i> <span>បង្កើតវិក្កយបត្រ</span></button>`;
+                renderDashboard();
+            } else if (viewName === 'customers') {
+                pageTitle.innerText = "បញ្ជីឈ្មោះអតិថិជន";
+                headerActions.innerHTML = `<button onclick="requestAdminAuthorization(() => openCustomerModal(null))" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 md:px-4 md:py-2 rounded-lg font-medium text-xs cursor-pointer transition-all"><i data-lucide="user-plus" class="w-3.5 h-3.5"></i> <span>បន្ថែមអតិថិជន</span></button>`;
+                renderCustomers();
+            } else if (viewName === 'invoices-list') {
+                pageTitle.innerText = "ប្រព័ន្ធសៀវភៅបញ្ជីវិក្កយបត្ររួម";
+                lockMatrixFields(false);
+                renderInvoicesList();
+            }
+            lucide.createIcons();
+        }
+
+        function lockMatrixFields(shouldUnlock) {
+            const fieldset = document.getElementById('matrix-fieldset');
+            const btn = document.getElementById('matrix-lock-btn');
+            if(shouldUnlock) { fieldset.removeAttribute('disabled'); fieldset.classList.remove('opacity-60'); btn.classList.add('hidden'); } 
+            else { fieldset.setAttribute('disabled', 'true'); fieldset.classList.add('opacity-60'); btn.classList.remove('hidden'); }
+        }
+        function updateSystemRules() {
+            config.baseRate = parseFloat(document.getElementById('config-base-rate').value) || 0;
+            config.unitRate = parseFloat(document.getElementById('config-unit-rate').value) || 0;
+            config.dueDays = parseInt(document.getElementById('config-due-days').value) || 15;
+            lockMatrixFields(false);
+            alert("ប្រព័ន្ធកែប្រែតម្លៃត្រូវបានរក្សាទុកដោយជោគជ័យ។");
+        }
+
+        function getCustomerPrevBillingData(custId, excludeInvoiceNo = null) {
+            const custInvoices = invoices.filter(inv => inv.id === custId && inv.invoiceNo !== excludeInvoiceNo);
+            const customer = customers.find(c => c.id === custId);
+            let prevMeter = customer ? customer.initialMeter : 0;
+            if (custInvoices.length > 0) prevMeter = Math.max(...custInvoices.map(i => i.endM));
+            let remainingDebt = 0;
+            custInvoices.forEach(inv => { if (inv.status !== 'Paid') remainingDebt += (inv.totalBilled - inv.amountPaid); });
+            return { prevMeter, remainingDebt };
+        }
+
+        // --- Core Invoice Renderer ---
+        function renderDashboard() {
+            const tbody = document.getElementById('dash-table-body');
+            const cardsContainer = document.getElementById('dash-cards-container');
+            const searchVal = document.getElementById('dash-search').value.toLowerCase();
+            const selectedMonth = document.getElementById('dash-filter-month').value;
+
+            tbody.innerHTML = ''; cardsContainer.innerHTML = '';
+            let revSum = 0, consSum = 0, unpaidCount = 0, overdueCount = 0;
+            const sortedInvoices = [...invoices].sort((a,b) => b.invoiceNo.localeCompare(a.invoiceNo));
+
+            sortedInvoices.forEach(inv => {
+                const cust = customers.find(c => c.id === inv.id) || { name: "N/A", phone: "N/A" };
+                if (inv.month === selectedMonth) {
+                    revSum += inv.totalBilled; consSum += inv.consumption;
+                    if (inv.status === 'Unpaid') unpaidCount++;
+                    if (inv.status === 'Overdue') overdueCount++;
+
+                    if (inv.invoiceNo.toLowerCase().includes(searchVal) || cust.name.toLowerCase().includes(searchVal) || inv.id.toLowerCase().includes(searchVal)) {
+                        let pillClass = inv.status === 'Paid' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : (inv.status === 'Unpaid' ? 'bg-amber-50 text-amber-700 ring-amber-600/20' : 'bg-rose-50 text-rose-700 ring-rose-600/20');
+                        let payButton = inv.status !== 'Paid' ? `<button onclick="openPaymentModal('${inv.invoiceNo}')" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md font-medium cursor-pointer transition-all">ទទួលប្រាក់</button>` : '';
+
+                        tbody.insertAdjacentHTML('beforeend', `
+                            <tr class="hover:bg-slate-50/50">
+                                <td class="px-6 py-4">
+                                    <button onclick="openEditInvoiceModal('${inv.invoiceNo}')" class="font-mono font-bold text-blue-600 hover:text-blue-800 text-left underline cursor-pointer block">${inv.invoiceNo}</button>
+                                    <div class="text-xs text-slate-400">ថ្ងៃចេញ: ${inv.date}</div>
+                                </td>
+                                <td class="px-6 py-4"><div class="font-semibold text-slate-900">${cust.name}</div><div class="text-xs text-slate-400">ID: ${inv.id}</div></td>
+                                <td class="px-6 py-4 font-mono text-slate-500 text-xs">${inv.startM}m³ &rarr; <span class="font-bold text-slate-800">${inv.endM}m³</span></td>
+                                <td class="px-6 py-4 font-semibold text-blue-600">${inv.consumption} m³</td>
+                                <td class="px-6 py-4"><div class="font-bold text-slate-900">$${inv.totalBilled.toFixed(2)}</div></td>
+                                <td class="px-6 py-4 font-mono text-xs text-slate-600">${inv.dueDate}</td>
+                                <td class="px-6 py-4">
+                                    <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${pillClass}">${getKhmerStatus(inv.status)}</span>
+                                </td>
+                                <td class="px-6 py-4 text-right space-x-1 whitespace-nowrap">
+                                    ${payButton}
+                                    <button onclick="executeThermalPrint('${inv.invoiceNo}')" class="text-xs border border-slate-200 hover:bg-slate-100 text-slate-600 px-2 py-1.5 rounded-md font-medium transition-all cursor-pointer"><i data-lucide="printer" class="w-3 h-3"></i></button>
+                                </td>
+                            </tr>
+                        `);
+
+                        cardsContainer.insertAdjacentHTML('beforeend', `
+                            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <span class="font-mono font-bold text-blue-600 text-sm block">${inv.invoiceNo}</span>
+                                        <span class="text-xs text-slate-900 font-semibold">${cust.name}</span>
+                                    </div>
+                                    <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${pillClass}">${getKhmerStatus(inv.status)}</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-150 font-mono">
+                                    <div><span class="text-[10px] text-slate-400 block">លេខនាឡិកា</span>${inv.startM}m³ &rarr; ${inv.endM}m³</div>
+                                    <div><span class="text-[10px] text-slate-400 block">ប្រើប្រាស់សរុប</span><span class="font-bold text-blue-600">${inv.consumption} m³</span></div>
+                                    <div><span class="text-[10px] text-slate-400 block">ថ្ងៃផុតកំណត់</span><span class="text-rose-600 font-bold">${inv.dueDate}</span></div>
+                                    <div><span class="text-[10px] text-slate-400 block">ទឹកប្រាក់សរុប</span><span class="text-slate-900 font-bold">$${inv.totalBilled.toFixed(2)}</span></div>
+                                </div>
+                                <div class="flex justify-end gap-1.5 pt-1">
+                                    <button onclick="executeThermalPrint('${inv.invoiceNo}')" class="text-xs border border-slate-200 px-3 py-2 rounded-lg text-slate-600 font-medium inline-flex items-center gap-1"><i data-lucide="printer" class="w-3.5 h-3.5"></i> បោះពុម្ភ</button>
+                                    ${payButton ? `<button onclick="openPaymentModal('${inv.invoiceNo}')" class="text-xs bg-emerald-600 text-white px-3 py-2 rounded-lg font-medium">ទូទាត់</button>`:''}
+                                </div>
+                            </div>
+                        `);
+                    }
+                }
+            });
+
+            document.getElementById('dash-revenue').innerText = `$${revSum.toFixed(2)}`;
+            document.getElementById('dash-consumption').innerText = `${consSum} m³`;
+            document.getElementById('dash-unpaid').innerText = unpaidCount;
+            document.getElementById('dash-overdue').innerText = overdueCount;
+            lucide.createIcons();
+        }
+
+        function executeThermalPrint(invoiceNo) {
+            const inv = invoices.find(i => i.invoiceNo === invoiceNo); if (!inv) return;
+            const cust = customers.find(c => c.id === inv.id) || { name: "មិនស្គាល់", address: "ភូមិ ហង្សឈូក" };
+            
+            document.getElementById('thermal-receipt-printout').innerHTML = `
+                <div class="text-center font-bold" style="font-size:13px;">*** ទឹកស្អាត ជុក ឯម ***</div>
+                <div class="text-center" style="font-size:9px;">ភូមិ ហង្សឈូក ស្រុកសាមគ្គីមានជ័យ ខេត្តកំពង់ឆ្នាំង</div>
+                <div class="receipt-dash">---------------------------</div>
+                <div class="receipt-flex"><span>លេខវិក្កយបត្រ:</span><span class="font-bold">${inv.invoiceNo}</span></div>
+                <div class="receipt-flex"><span>កាលបរិច្ឆេទចេញ:</span><span>${inv.date}</span></div>
+                <div class="receipt-flex" style="color:#000; font-weight:bold;"><span>ថ្ងៃផុតកំណត់បង់ប្រាក់:</span><span>${inv.dueDate}</span></div>
+                <div class="receipt-flex"><span>វដ្តគណនីខែ:</span><span>${inv.month}</span></div>
+                <div class="receipt-dash">---------------------------</div>
+                <div><span class="font-bold">អតិថិជន:</span> ${cust.name} (${inv.id})</div>
+                <div><span class="font-bold">អាសយដ្ឋាន:</span> ${cust.address}</div>
+                <div class="receipt-dash">---------------------------</div>
+                <div class="receipt-flex"><span>លេខនាឡិកាចាស់:</span><span>${inv.startM} m³</span></div>
+                <div class="receipt-flex"><span>លេខនាឡិកាថ្មី:</span><span>${inv.endM} m³</span></div>
+                <div class="receipt-flex"><span>ប្រើប្រាស់សរុប:</span><span class="font-bold">${inv.consumption} m³</span></div>
+                <div class="receipt-dash">---------------------------</div>
+                <div class="receipt-flex"><span>ថ្លៃទឹកក្នុងខែ:</span><span>$${inv.waterCost.toFixed(2)}</span></div>
+                <div class="receipt-flex"><span>ប្រាក់ជំពាក់ចាស់:</span><span>$${inv.debtApplied.toFixed(2)}</span></div>
+                <div class="receipt-flex font-bold"><span>សរុបត្រូវបង់:</span><span>$${inv.totalBilled.toFixed(2)}</span></div>
+                <div class="receipt-flex text-emerald-700"><span>ប្រាក់ទទួលបាន:</span><span>$${inv.amountPaid.toFixed(2)}</span></div>
+                <div class="receipt-dash">---------------------------</div>
+                <div class="text-center font-bold" style="font-size:12px;">ស្ថានភាព: ${getKhmerStatus(inv.status)}</div>
+                <div class="receipt-dash">---------------------------</div>
+                <div class="text-center">សូមអរគុណសម្រាប់ការប្រើប្រាស់សេវាកម្ម!</div><br><br><br>
+            `;
+            window.print();
+        }
+
+        function submitNewInvoice(e) {
+            e.preventDefault();
+            const custId = document.getElementById('inv-cust-select').value;
+            const currentMeter = parseInt(document.getElementById('inv-curr-meter').value);
+            const targetMonth = document.getElementById('inv-date-month').value;
+
+            const issueDateObj = new Date();
+            const issueDateStr = issueDateObj.toISOString().split('T')[0];
+            
+            issueDateObj.setDate(issueDateObj.getDate() + config.dueDays);
+            const dueDateStr = issueDateObj.toISOString().split('T')[0];
+
+            const { prevMeter, remainingDebt } = getCustomerPrevBillingData(custId);
+            const consumption = currentMeter - prevMeter;
+            const waterCost = consumption > 0 ? config.baseRate + (consumption * config.unitRate) : 0;
+            const totalBilled = waterCost + remainingDebt;
+            const nextInvoiceNum = `${custId}_${String(invoices.filter(inv=>inv.id===custId).length+1).padStart(4,'0')}`;
+            
+            const newInv = {
+                invoiceNo: nextInvoiceNum, id: custId, month: targetMonth, startM: prevMeter, endM: currentMeter,
+                consumption: consumption, waterCost: waterCost, debtApplied: remainingDebt, totalBilled: totalBilled,
+                amountPaid: 0, status: totalBilled > 0 ? "Unpaid" : "Paid", date: issueDateStr, dueDate: dueDateStr, paymentDate: null
+            };
+            
+            invoices.push(newInv);
+            closeInvoiceModal(); renderDashboard(); triggerOverviewModal(newInv);
+        }
+
+        function openEditInvoiceModal(invoiceNo) {
+            const inv = invoices.find(i => i.invoiceNo === invoiceNo); if(!inv) return;
+            document.getElementById('edit-inv-target-no').value = invoiceNo;
+            document.getElementById('edit-inv-subtitle').innerText = `Invoice Key Code: ${invoiceNo}`;
+            document.getElementById('edit-inv-start').value = inv.startM;
+            document.getElementById('edit-inv-end').value = inv.endM;
+            document.getElementById('edit-inv-consumption').value = inv.consumption;
+            document.getElementById('edit-inv-total').value = inv.totalBilled.toFixed(2);
+            document.getElementById('edit-inv-paid').value = inv.amountPaid.toFixed(2);
+            document.getElementById('edit-inv-status').value = inv.status;
+            document.getElementById('edit-inv-duedate').value = inv.dueDate;
+            document.getElementById('edit-inv-paydate').value = inv.paymentDate || 'No transaction processed';
+            document.getElementById('modal-edit-invoice').classList.remove('hidden');
+        }
+        function closeEditInvoiceModal() { document.getElementById('modal-edit-invoice').classList.add('hidden'); }
+        
+        function recalculateEditInvoiceForm() {
+            const start = parseInt(document.getElementById('edit-inv-start').value) || 0;
+            const end = parseInt(document.getElementById('edit-inv-end').value) || 0;
+            const consumption = Math.max(0, end - start);
+            document.getElementById('edit-inv-consumption').value = consumption;
+            const waterCost = consumption > 0 ? config.baseRate + (consumption * config.unitRate) : 0;
+            document.getElementById('edit-inv-total').value = waterCost.toFixed(2);
+        }
+
+        function submitInvoiceModification(e) {
+            e.preventDefault();
+            const invNo = document.getElementById('edit-inv-target-no').value;
+            const inv = invoices.find(i => i.invoiceNo === invNo);
+            if(inv) {
+                inv.startM = parseInt(document.getElementById('edit-inv-start').value);
+                inv.endM = parseInt(document.getElementById('edit-inv-end').value);
+                inv.consumption = parseInt(document.getElementById('edit-inv-consumption').value);
+                inv.totalBilled = parseFloat(document.getElementById('edit-inv-total').value);
+                inv.dueDate = document.getElementById('edit-inv-duedate').value;
+                inv.amountPaid = parseFloat(document.getElementById('edit-inv-paid').value);
+                inv.status = document.getElementById('edit-inv-status').value;
+                closeEditInvoiceModal(); renderDashboard();
+            }
+        }
+
+        function openPaymentModal(invoiceNo) {
+            const inv = invoices.find(i => i.invoiceNo === invoiceNo); if(!inv) return;
+            document.getElementById('pay-invoice-id').value = invoiceNo;
+            document.getElementById('pay-modal-subtitle').innerText = `ID: ${invoiceNo}`;
+            document.getElementById('pay-text-due').innerText = `$${inv.waterCost.toFixed(2)}`;
+            document.getElementById('pay-text-debt').innerText = `$${inv.debtApplied.toFixed(2)}`;
+            const totalOutstanding = inv.totalBilled - inv.amountPaid;
+            document.getElementById('pay-text-total').innerText = `$${totalOutstanding.toFixed(2)}`;
+            document.getElementById('pay-input-amount').value = totalOutstanding.toFixed(2);
+            document.getElementById('modal-payment').classList.remove('hidden');
+        }
+        function closePaymentModal() { document.getElementById('modal-payment').classList.add('hidden'); }
+        function submitPaymentReceived(e) {
+            e.preventDefault();
+            const invNo = document.getElementById('pay-invoice-id').value;
+            const payAmt = parseFloat(document.getElementById('pay-input-amount').value) || 0;
+            const inv = invoices.find(i => i.invoiceNo === invNo);
+            if(inv) {
+                inv.amountPaid += payAmt; inv.paymentDate = new Date().toISOString().split('T')[0];
+                if (inv.amountPaid >= inv.totalBilled) inv.status = 'Paid';
+                closePaymentModal(); renderDashboard(); executeThermalPrint(invNo);
+            }
+        }
+
+        function triggerOverviewModal(inv) {
+            const cust = customers.find(c => c.id === inv.id) || { name: "N/A" };
+            document.getElementById('overview-inv-no').innerText = inv.invoiceNo;
+            document.getElementById('overview-cust-id').innerText = inv.id;
+            document.getElementById('overview-cust-name').innerText = cust.name;
+            document.getElementById('overview-consumption').innerText = `${inv.consumption} m³`;
+            document.getElementById('overview-total').innerText = `$${inv.totalBilled.toFixed(2)}`;
+            document.getElementById('overview-print-btn').onclick = () => { executeThermalPrint(inv.invoiceNo); closeOverviewModal(); };
+            document.getElementById('modal-created-overview').classList.remove('hidden');
+        }
+        function closeOverviewModal() { document.getElementById('modal-created-overview').classList.add('hidden'); }
+
+        // --- Native Excel Spreadsheet XLSX Export Engine ---
+        function exportXLSX(dataType) {
+            let dataArray = [];
+            let dateString = new Date().toISOString().split('T')[0];
+            let fileName = dataType === 'customers' ? `Customer_Data_${dateString}.xlsx` : `Invoice_Data_${dateString}.xlsx`;
+            
+            if (dataType === 'customers') {
+                dataArray = customers.map(c => {
+                    const { prevMeter } = getCustomerPrevBillingData(c.id);
+                    return {
+                        "Customer ID": c.id,
+                        "Full Name": c.name,
+                        "Phone Number": c.phone,
+                        "Service Address": c.address,
+                        "Latest Meter (m3)": prevMeter
+                    };
+                });
+            } else {
+                dataArray = invoices.map(i => {
+                    const cust = customers.find(c => c.id === i.id) || { name: "N/A" };
+                    return {
+                        "Invoice Number": i.invoiceNo, "Customer ID": i.id, "Full Name": cust.name, "Billing Month": i.month,
+                        "Start Index": i.startM, "End Index": i.endM, "Consumption (m3)": i.consumption, "Total Gross ($)": i.totalBilled,
+                        "Collected ($)": i.amountPaid, "Payment Due Date": i.dueDate, "Lifecycle Status": i.status, "Issue Date": i.date
+                    };
+                });
+            }
+            
+            const worksheet = XLSX.utils.json_to_sheet(dataArray);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, dataType.toUpperCase());
+            XLSX.writeFile(workbook, fileName);
+        }
+
+        function importXLSX(event, dataType) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const jsonRows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                let count = 0;
+
+                jsonRows.forEach(row => {
+                    if (dataType === 'customers' && row["Customer ID"]) {
+                        const existingIdx = customers.findIndex(c => c.id === String(row["Customer ID"]));
+                        const dataObj = { 
+                            id: String(row["Customer ID"]), name: row["Full Name"] || "N/A", phone: row["Phone Number"] || "N/A", 
+                            address: row["Service Address"] || "N/A", initialMeter: parseInt(row["Latest Meter (m3)"]) || 0 
+                        };
+                        if(existingIdx > -1) customers[existingIdx] = dataObj; else customers.push(dataObj);
+                        count++;
+                    } else if (dataType === 'invoices' && row["Invoice Number"]) {
+                        const existingIdx = invoices.findIndex(inv => inv.invoiceNo === String(row["Invoice Number"]));
+                        const dataObj = {
+                            invoiceNo: String(row["Invoice Number"]), id: String(row["Customer ID"]), month: String(row["Billing Month"]), 
+                            startM: parseInt(row["Start Index"]) || 0, endM: parseInt(row["End Index"]) || 0, consumption: parseInt(row["Consumption (m3)"]) || 0, 
+                            totalBilled: parseFloat(row["Total Gross ($)"]) || 0, amountPaid: parseFloat(row["Collected ($)"]) || 0,
+                            dueDate: row["Payment Due Date"] || "2026-06-30", status: String(row["Lifecycle Status"] || "Unpaid"), 
+                            date: String(row["Issue Date"]), paymentDate: null, waterCost: parseFloat(row["Total Gross ($)"]) || 0, debtApplied: 0
+                        };
+                        if(existingIdx > -1) invoices[existingIdx] = dataObj; else invoices.push(dataObj);
+                        count++;
+                    }
+                });
+
+                alert(`ការនាំចូលជោគជ័យ: បានផ្ទៀងផ្ទាត់ចំនួន ${count} កំណត់ត្រា។`);
+                event.target.value = ''; switchView(activeView);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- Profiles Data Render Elements ---
+        function renderCustomers() {
+            const tbody = document.getElementById('cust-table-body');
+            const cardsContainer = document.getElementById('cust-cards-container');
+            const searchVal = document.getElementById('cust-search').value.toLowerCase();
+            tbody.innerHTML = ''; cardsContainer.innerHTML = '';
+
+            customers.forEach(c => {
+                if (c.name.toLowerCase().includes(searchVal) || c.id.toLowerCase().includes(searchVal)) {
+                    const { prevMeter } = getCustomerPrevBillingData(c.id);
+                    
+                    tbody.insertAdjacentHTML('beforeend', `
+                        <tr class="hover:bg-slate-50/50">
+                            <td class="px-6 py-4 font-mono font-bold text-slate-600">${c.id}</td>
+                            <td class="px-6 py-4 font-semibold text-slate-900">${c.name}</td>
+                            <td class="px-6 py-4 text-slate-600">${c.phone}</td>
+                            <td class="px-6 py-4 text-slate-500 max-w-xs truncate">${c.address}</td>
+                            <td class="px-6 py-4 font-mono font-bold text-slate-700">${prevMeter} m³</td>
+                            <td class="px-6 py-4 text-right">
+                                <button onclick="requestAdminAuthorization(() => openCustomerModal('${c.id}'))" class="text-xs border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-md font-medium cursor-pointer transition-all">កែប្រែ</button>
+                            </td>
+                        </tr>
+                    `);
+
+                    cardsContainer.insertAdjacentHTML('beforeend', `
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="font-mono text-xs font-bold text-slate-400">${c.id}</span>
+                                <span class="text-xs font-mono font-bold text-slate-800">${prevMeter} m³</span>
+                            </div>
+                            <h4 class="text-sm font-bold text-slate-900">${c.name}</h4>
+                            <p class="text-xs text-slate-500">📞 ${c.phone} | 📍 ${c.address}</p>
+                            <div class="flex justify-end pt-1">
+                                <button onclick="requestAdminAuthorization(() => openCustomerModal('${c.id}'))" class="text-xs border border-slate-200 px-3 py-1.5 rounded-md font-medium text-slate-700">កែប្រែទម្រង់</button>
+                            </div>
+                        </div>
+                    `);
+                }
+            });
+        }
+
+        function renderInvoicesList() {
+            const tbody = document.getElementById('master-inv-table-body'); tbody.innerHTML = '';
+            invoices.forEach(inv => {
+                const cust = customers.find(c => c.id === inv.id) || { name: "N/A" };
+                tbody.insertAdjacentHTML('beforeend', `
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-6 py-3 font-bold">${inv.invoiceNo}</td>
+                        <td class="px-6 py-3 text-slate-500">${inv.id}</td>
+                        <td class="px-6 py-3 font-semibold text-slate-700">${cust.name}</td>
+                        <td class="px-6 py-3">${inv.month}</td>
+                        <td class="px-6 py-3 font-bold text-slate-800">$${inv.totalBilled.toFixed(2)}</td>
+                        <td class="px-6 py-3">${getKhmerStatus(inv.status)}</td>
+                    </tr>
+                `);
+            });
+        }
+
+        function closeInvoiceModal() { document.getElementById('modal-invoice').classList.add('hidden'); }
+        function openInvoiceModal() {
+            const select = document.getElementById('inv-cust-select'); select.innerHTML = '';
+            customers.forEach(c => { select.insertAdjacentHTML('beforeend', `<option value="${c.id}">${c.name} (${c.id})</option>`); });
+            handleCustomerSelectChange(); document.getElementById('modal-invoice').classList.remove('hidden');
+        }
+        function handleCustomerSelectChange() {
+            const custId = document.getElementById('inv-cust-select').value; if(!custId) return;
+            const { prevMeter, remainingDebt } = getCustomerPrevBillingData(custId);
+            document.getElementById('inv-prev-meter-text').innerText = `${prevMeter} m³`;
+            document.getElementById('inv-prev-debt-text').innerText = `$${remainingDebt.toFixed(2)}`;
+            document.getElementById('inv-curr-meter').min = prevMeter; document.getElementById('inv-curr-meter').value = prevMeter;
+        }
+
+        function openCustomerModal(id = null) {
+            if(id) {
+                const c = customers.find(cust => cust.id === id);
+                document.getElementById('cust-modal-title').innerText = "កែប្រែប្រវត្តិរូបអតិថិជន";
+                document.getElementById('initial-meter-container').classList.add('hidden');
+                document.getElementById('edit-cust-id').value = c.id;
+                document.getElementById('form-cust-name').value = c.name;
+                document.getElementById('form-cust-phone').value = c.phone;
+                document.getElementById('form-cust-address').value = c.address;
+            } else {
+                document.getElementById('cust-modal-title').innerText = "ចុះឈ្មោះប្រវត្តិអតិថិជនថ្មី";
+                document.getElementById('initial-meter-container').classList.remove('hidden');
+                document.getElementById('edit-cust-id').value = ''; document.getElementById('customer-form').reset();
+            }
+            document.getElementById('modal-customer').classList.remove('hidden');
+        }
+        function closeCustomerModal() { document.getElementById('modal-customer').classList.add('hidden'); }
+        
+        function submitCustomerForm(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-cust-id').value;
+            const name = document.getElementById('form-cust-name').value, phone = document.getElementById('form-cust-phone').value, address = document.getElementById('form-cust-address').value;
+            if (editId) { const c = customers.find(cust => cust.id === editId); c.name = name; c.phone = phone; c.address = address; } 
+            else { const nextId = `C${String(1 + customers.length).padStart(3, '0')}`; const initialMeter = parseInt(document.getElementById('form-cust-initial-meter').value) || 0; customers.push({ id: nextId, name, phone, address, initialMeter }); }
+            closeCustomerModal(); if(activeView === 'customers') renderCustomers(); else renderDashboard();
+        }
+
+        window.onload = () => { switchView('dashboard'); };
+    </script>
+</body>
+</html>
