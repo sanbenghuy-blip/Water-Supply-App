@@ -1,0 +1,251 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ទឹកស្អាត ជុក ឯម - System Engine</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        @font-face {
+            font-family: 'Khmer OS Battambang';
+            src: local('Khmer OS Battambang'), local('KhmerOSBattambang');
+        }
+        body {
+            font-family: 'Khmer OS Battambang', system-ui, -apple-system, sans-serif;
+        }
+        @media print {
+            body *, #view-dashboard, #view-customers, #view-invoices-list, .fixed, header, flex {
+                display: none !important;
+            }
+            #thermal-receipt-printout, #thermal-receipt-printout * {
+                display: block !important;
+            }
+            #thermal-receipt-printout {
+                position: absolute; left: 0; top: 0; width: 58mm; padding: 2mm;
+                font-family: 'Courier New', Courier, monospace, 'Khmer OS Battambang'; font-size: 11px; line-height: 1.3; color: #000; background: #fff;
+            }
+            .receipt-dash { border-bottom: 1px dashed #000; margin: 4px 0; }
+            .receipt-flex { display: flex !important; justify-content: space-between; }
+            .text-center { text-align: center !important; }
+        }
+        #thermal-receipt-printout { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 pb-20 md:pb-0">
+
+    <div class="flex h-screen overflow-hidden">
+        <div class="w-64 bg-slate-900 text-white flex flex-col justify-between hidden md:flex shrink-0">
+            <div class="p-5">
+                <div class="flex flex-col gap-1 mb-8">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="droplet" class="text-blue-400 w-8 h-8 shrink-0"></i>
+                        <span class="text-xl font-bold tracking-wider text-blue-400">ទឹកស្អាត ជុក ឯម</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 mt-2 block leading-relaxed">ភូមិ ហង្សឈូក ស្រុកសាមគ្គីមានជ័យ ខេត្តកំពង់ឆ្នាំង</span>
+                </div>
+                <nav class="space-y-2">
+                    <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="layout-dashboard" class="w-5 h-5"></i> <span>ផ្ទាំងគ្រប់គ្រង</span>
+                    </button>
+                    <button onclick="switchView('customers')" id="nav-customers" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="users" class="w-5 h-5"></i> <span>ព័ត៌មានអតិថិជន</span>
+                    </button>
+                    <button onclick="switchView('invoices-list')" id="nav-invoices-list" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium cursor-pointer transition-colors">
+                        <i data-lucide="receipt" class="w-5 h-5"></i> <span>គ្រប់គ្រងវិក្កយបត្រ</span>
+                    </button>
+                </nav>
+            </div>
+            <div class="p-4 border-t border-slate-800 text-[11px] text-slate-500 text-center space-y-1">
+                <div>សមគ្គីមានជ័យ, កំពង់ឆ្នាំង</div>
+                <div>v3.1.0 &copy; 2026</div>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col overflow-y-auto">
+            <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10 shadow-xs">
+                <div class="flex flex-col">
+                    <h1 id="page-title" class="text-sm md:text-lg font-bold text-slate-800">ផ្ទាំងគ្រប់គ្រងប្រតិបត្តិការ</h1>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <div id="header-actions" class="flex gap-2"></div>
+                </div>
+            </header>
+
+            <header class="p-4 md:p-8 space-y-6 max-w-7xl w-full mx-auto">
+                
+                <div id="view-dashboard" class="space-y-6">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5">
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ចំណូលសរុប (ខែ)</p><h3 id="dash-revenue" class="text-lg md:text-2xl font-bold text-slate-900">0 ៛</h3></div>
+                            <div class="p-2 md:p-3 bg-emerald-50 text-emerald-600 rounded-lg hidden sm:block"><i data-lucide="wallet"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ការប្រើប្រាស់ទឹក</p><h3 id="dash-consumption" class="text-lg md:text-2xl font-bold text-slate-900">0 m³</h3></div>
+                            <div class="p-2 md:p-3 bg-blue-50 text-blue-600 rounded-lg hidden sm:block"><i data-lucide="droplet"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">មិនទាន់ទូទាត់</p><h3 id="dash-unpaid" class="text-lg md:text-2xl font-bold text-amber-600">0</h3></div>
+                            <div class="p-2 md:p-3 bg-amber-50 text-amber-600 rounded-lg hidden sm:block"><i data-lucide="file-text"></i></div>
+                        </div>
+                        <div class="bg-white p-4 md:p-5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs font-semibold text-slate-400 uppercase tracking-wider">ហួសកាលកំណត់</p><h3 id="dash-overdue" class="text-lg md:text-2xl font-bold text-rose-600">0</h3></div>
+                            <div class="p-2 md:p-3 bg-rose-50 text-rose-600 rounded-lg hidden sm:block"><i data-lucide="alert-triangle"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                        <div class="relative flex-1">
+                            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input id="dash-search" type="text" placeholder="ស្វែងរក លេខវិក្កយបត្រ ឬ ឈ្មោះអតិថិជន..." oninput="renderDashboard()" class="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none placeholder:text-xs placeholder:md:text-sm">
+                        </div>
+                        <div class="flex items-center justify-between sm:justify-end gap-2">
+                            <label class="text-xs font-medium text-slate-400">ជ្រើសរើសខែបង់ប្រាក់:</label>
+                            <input id="dash-filter-month" type="month" value="2026-06" onchange="renderDashboard()" class="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">ព័ត៌មានវិក្កយបត្រ</th>
+                                        <th class="px-6 py-4">គណនីអតិថិជន</th>
+                                        <th class="px-6 py-4">លេខនាឡិកា (ចាស់ ➔ ថ្មី)</th>
+                                        <th class="px-6 py-4">ប្រើប្រាស់សរុប</th>
+                                        <th class="px-6 py-4">ទឹកប្រាក់ត្រូវបង់</th>
+                                        <th class="px-6 py-4">ថ្ងៃផុតកំណត់</th>
+                                        <th class="px-6 py-4">ស្ថានភាព</th>
+                                        <th class="px-6 py-4 text-right">សកម្មភាព</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dash-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="dash-cards-container" class="block md:hidden p-4 space-y-4 bg-slate-50/50"></div>
+                    </div>
+                </div>
+
+                <div id="view-customers" class="space-y-6 hidden">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3 sm:flex-row justify-between sm:items-center">
+                        <input id="cust-search" type="text" placeholder="ស្វែងរកក្នុងបញ្ជីឈ្មោះអតិថិជន..." oninput="renderCustomers()" class="max-w-md w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none">
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+                            <button onclick="exportXLSX('customers')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer shrink-0"><i data-lucide="download" class="w-3.5 h-3.5"></i> <span>ទាញយកជា Excel</span></button>
+                            <button onclick="triggerImportGate('customers')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer shrink-0"><i data-lucide="upload" class="w-3.5 h-3.5"></i> <span>បញ្ចូលឯកសារ Excel</span></button>
+                            <input type="file" id="import-cust-file" accept=".xlsx, .xls" onchange="importXLSX(event, 'customers')" class="hidden">
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div class="hidden md:block overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                        <th class="px-6 py-4">អត្តសញ្ញាណ (ID)</th>
+                                        <th class="px-6 py-4">ឈ្មោះពេញ</th>
+                                        <th class="px-6 py-4">លេខទូរស័ព្ទ</th>
+                                        <th class="px-6 py-4">អាសយដ្ឋានសេវាកម្ម</th>
+                                        <th class="px-6 py-4">ទិន្នន័យនាឡិកាចុងក្រោយ</th>
+                                        <th class="px-6 py-4 text-right">សកម្មភាព</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="cust-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+                            </table>
+                        </div>
+                        <div id="cust-cards-container" class="block md:hidden p-4 space-y-4 bg-slate-50/50"></div>
+                    </div>
+                </div>
+
+                <div id="view-invoices-list" class="space-y-6 hidden">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-xs h-fit space-y-4">
+                            <div class="flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2"><i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i> <span>កំណត់តម្លៃសេវាកម្ម</span></h3>
+                                <button type="button" id="matrix-lock-btn" onclick="requestAdminAuthorization(() => lockMatrixFields(true))" class="text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition-all cursor-pointer">ចុចដើម្បីកែប្រែ</button>
+                            </div>
+                            <hr class="border-slate-100">
+                            <fieldset id="matrix-fieldset" disabled class="space-y-3 opacity-60">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">កម្រៃសេវាថេរប្រចាំខែ (៛)</label>
+                                    <input id="config-base-rate" type="number" step="1" value="0" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">តម្លៃទឹកក្នុងមួយម៉ែត្រគូប (៛ / m³)</label>
+                                    <input id="config-unit-rate" type="number" step="1" value="1500" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">រយៈពេលត្រូវបង់ប្រាក់ (ថ្ងៃ)</label>
+                                    <input id="config-due-days" type="number" value="15" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:bg-white font-mono">
+                                </div>
+                                <div class="flex gap-2 pt-2">
+                                    <button type="button" onclick="lockMatrixFields(false)" class="w-1/2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium py-2 rounded-lg cursor-pointer">បោះបង់</button>
+                                    <button type="button" onclick="updateSystemRules()" class="w-1/2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-2 rounded-lg cursor-pointer">រក្សាទុក</button>
+                                </div>
+                            </fieldset>
+                        </div>
+                        
+                        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                            <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                                <h3 class="text-sm font-bold text-slate-900">សៀវភៅបញ្ជីវិក្កយបត្រសរុប</h3>
+                                <div class="flex gap-2">
+                                    <button onclick="exportXLSX('invoices')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"><i data-lucide="download" class="w-3 h-3"></i> <span>ទាញយក</span></button>
+                                    <button onclick="triggerImportGate('invoices')" class="flex items-center gap-1.5 border border-slate-200 bg-white hover:bg-slate-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"><i data-lucide="upload" class="w-3 h-3"></i> <span>បញ្ចូលឯកសារ</span></button>
+                                    <input type="file" id="import-inv-file" accept=".xlsx, .xls" onchange="importXLSX(event, 'invoices')" class="hidden">
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                                            <th class="px-6 py-3">លេខវិក្កយបត្រ</th>
+                                            <th class="px-6 py-3">អត្តសញ្ញាណអតិថិជន</th>
+                                            <th class="px-6 py-3">ឈ្មោះពេញ</th>
+                                            <th class="px-6 py-3">វដ្តគណនីខែ</th>
+                                            <th class="px-6 py-3">ទឹកប្រាក់សរុប</th>
+                                            <th class="px-6 py-3">ស្ថានភាព</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="master-inv-table-body" class="divide-y divide-slate-100 text-xs font-mono"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </header>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 flex items-center justify-around py-2 z-40 md:hidden">
+        <button onclick="switchView('dashboard')" id="mob-nav-dashboard" class="flex flex-col items-center gap-0.5 text-blue-400 font-medium transition-all">
+            <i data-lucide="layout-dashboard" class="w-5 h-5"></i><span class="text-[9px]">ផ្ទាំងគ្រប់គ្រង</span>
+        </button>
+        <button onclick="switchView('customers')" id="mob-nav-customers" class="flex flex-col items-center gap-0.5 text-slate-500 font-medium transition-all">
+            <i data-lucide="users" class="w-5 h-5"></i><span class="text-[9px]">អតិថិជន</span>
+        </button>
+        <button onclick="switchView('invoices-list')" id="mob-nav-invoices-list" class="flex flex-col items-center gap-0.5 text-slate-500 font-medium transition-all">
+            <i data-lucide="receipt" class="w-5 h-5"></i><span class="text-[9px]">វិក្កយបត្រ</span>
+        </button>
+    </div>
+
+    <div id="thermal-receipt-printout"></div>
+
+    <div id="modal-auth" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div class="mx-auto w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center"><i data-lucide="lock" class="w-6 h-6"></i></div>
+            <div>
+                <h3 class="text-base font-bold text-slate-900">តម្រូវឱ្យមានការអនុញ្ញាតពីអ្នកគ្រប់គ្រង</h3>
+                <p class="text-xs text-slate-400 mt-1">សូមបញ្ចូលលេខកូដសម្ងាត់អ្នកគ្រប់គ្រងដើម្បីបន្តប្រតិបត្តិការ。</p>
+            </div>
+            <input type="password" id="auth-password-input" placeholder="••••••" class="w-full text-center tracking-widest text-lg font-bold px-3 py-2 border border-slate-200 rounded-lg outline-none focus:border-blue-500">
+            <div class="flex gap-2">
+                <button onclick="closeAuthModal()" class="w-1/2 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 cursor-pointer">បោះបង់</button>
+                <button onclick="verifyAdminAuthorization()" class="w-1/2 py-2 bg-slate-900 hover:bg-slate-950 text-white rounded-lg text-sm font-medium cursor-pointer">ផ្ទៀងផ្ទាត់កូដ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-invoice" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs hidden z-50 fl
